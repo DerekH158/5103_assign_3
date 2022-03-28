@@ -9,81 +9,115 @@
 #class 5103
 #assignment #3
 #created by Derek Halkes
-#version 2
-#last modified date: 3/22/2022
+#version 3
+#last modified date: 3/28/2022
 
 #libraries needed
 library(tidyverse)
 library(shiny)
 library(shinydashboard)
-library(mapdata)
+library(rsconnect)
+#library(mapdata)
 
 #importing raw data
 bees <- read_csv("honeybees.csv")
-states <- map_data("state")
+#states <- map_data("state")
 
-#changing data type for "year" column
-#bees$year = as.integer(bees$year)
+#removing unneeded columns
+bees2 <- bees[c(1:10)]
+
+#reordering 2 of the columns
+bees2 <- bees2[with(bees2, order(StateName, year)), ]
+
+#renaming columns
+bees3 <- rename(bees2, c("No. of colonies" = "numcol",
+                "Yield per colony" = "yieldpercol",
+                "Total production" = "totalprod",
+                "Price per lb." = "priceperlb",
+                "Production value" = "prodvalue"))
 
 #changing State to lower case for joins
-bees$StateName = tolower(bees$StateName)
+#bees$StateName = tolower(bees$StateName)
 
 #merging state map data with bee data
-state_map <- left_join(states, bees, by = c("region" = "StateName"))
+#state_map <- left_join(states, bees, by = c("region" = "StateName"))
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
 
     # Application title
-    headerPanel("Honey bee data for years 1998-2017"),
+    titlePanel("Honeybee data in the US"),
 
-    sidebarPanel(
-        selectInput("select", "Choose a dataset:",
-                    choices = c("# of colonies" = "numcol",
-                                "yield per colony" = "yieldpercol",
-                                "price per lb." = "priceperlb",
-                                "total production" = "totalprod")),
-        sliderInput("slider", "Years:",
-                    min = state_map$year[1],  # The min value is the first available year
-##if i change max input to 20 (which is the number of years in data)
-##then the slider converts to decimals
-                    max = state_map$year[14],  # The max value is the last available year
-                    value = c(state_map$year[1], state_map$year[14]),  # The default selected values are the min to max years i.e the whole data
-                    sep = ""),
-        mainPanel(
+sidebarLayout(
     
-            verbatimTextOutput("summary"),
-            
-            #output
-            tableOutput("view")    
+sidebarPanel(
     
-        )
-        )
+    # Create a new Row in the UI for selectInputs
+    fluidRow(
+        column(4,
+               selectInput("stt",
+                           "State:",
+                           c("All",
+                             unique(as.character(bees3$StateName))))
+        )),
+    fluidRow(
+        column(4,
+               selectInput("year",
+                           "Year:",
+                           c("All",
+                             unique(as.character(bees3$year))))
+        ),
+    ),
+),
+mainPanel(
+    # Create a new row for the table.
+   DT::dataTableOutput("table")
+    
+,
+#spot for barplot 1
+    plotOutput("beeplot1")  
+
+#secondary barplot
+    plotOutput("beeplot2")
+
 )
 
-# Define server logic required to draw an output
-server <- function(input, output){
+))
 
-    # Return the requested dataset ----
-    datasetInput <- reactive({
-        switch(input$select,
-               "# of colonies" = "numcol",
-               "yield per colony" = "yieldpercol",
-               "price per lb." = "priceperlb",
-               "total production" = "totalprod")
-    })
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+
+#table output
+    output$table <- DT::renderDataTable(DT::datatable({
+        data <- bees3
+        if (input$stt != "All") {
+            data <- data[data$StateName == input$stt,]
+        }
+        if (input$year != "All") {
+            data <- data[data$year == input$year,]
+        }
+        data
+    }))
     
-    # Generate a summary of the dataset ----
-    output$summary <- renderPrint({
-        dataset <- datasetInput()
-        summary(dataset)
-    })
+#barplot
+   output$beeplot1 <- renderPlot({
+        
+#render barplot
+        barplot(bees2[,inputtotalprod], 
+                main=input$totalprod,
+                ylab="Total bee production",
+                xlab="Year")}
+
+#barplot #2
+    output$beeplot2 <- renderPlot({
+#secondary barplot
+plot(x = year, y = bees2$priceperlb,
+     main="Price per pound by year",
+     xlab="Year",
+     ylab="Price per lb.",
+     col="blue")}
+            
     
-    # Show the years selected with slider
-    output$view <- renderTable({
-        head(datasetInput(), n = input$slider)
-    })
-}    
 
 # Run the application 
 shinyApp(ui = ui, server = server)
